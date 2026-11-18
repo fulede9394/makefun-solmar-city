@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmar City — an open-world crime game</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0e141b; font-family: Arial, Helvetica, sans-serif; }
+  #game-canvas { display: block; width: 100%; height: 100%; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; }
+  .panel { background: rgba(10, 16, 24, 0.62); border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(2px); }
+  #top-left { position: absolute; top: 14px; left: 14px; }
+  #stars { font-size: 26px; letter-spacing: 3px; line-height: 1; }
+  #stars span { color: rgba(255,255,255,0.25); }
+  #stars span.on { color: #ffd23c; text-shadow: 0 0 8px rgba(255,210,60,0.8); }
+  #cash { font-size: 24px; font-weight: bold; color: #7ee2a0; margin-top: 4px; }
+  #health-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  #health-bar { width: 130px; height: 10px; background: rgba(255,255,255,0.25); border-radius: 5px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #37d67a; }
+  #health-text { font-size: 13px; }
+  #mission { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; max-width: 520px; }
+  #mission-title { font-size: 17px; font-weight: bold; color: #ffd23c; }
+  #mission-obj { font-size: 14px; margin-top: 2px; }
+  #mission-dist { font-size: 13px; color: #bcd6ff; margin-top: 2px; }
+  #minimap-wrap { position: absolute; top: 14px; right: 14px; }
+  #minimap { display: block; border-radius: 10px; border: 2px solid rgba(255,255,255,0.25); }
+  #speedo { position: absolute; right: 14px; bottom: 14px; text-align: right; }
+  #speed { font-size: 38px; font-weight: bold; line-height: 1; }
+  #speed-unit { font-size: 13px; color: #cfe3ff; }
+  #car-health { font-size: 13px; margin-top: 2px; }
+  #controls { position: absolute; left: 14px; bottom: 14px; font-size: 13px; line-height: 1.6; color: #dbe6f2; }
+  #toast { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); background: rgba(10,16,24,0.78); border-radius: 999px; padding: 9px 20px; font-size: 15px; opacity: 0; transition: opacity 0.4s; white-space: nowrap; }
+  #job-done { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: 44px; font-weight: bold; color: #ffd23c; text-shadow: 0 3px 18px rgba(0,0,0,0.7); display: none; letter-spacing: 2px; }
+  #start-screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8, 14, 22, 0.55); pointer-events: auto; z-index: 10; }
+  #start-card { background: rgba(10, 18, 28, 0.92); border: 1px solid rgba(255,255,255,0.18); border-radius: 16px; padding: 34px 44px; text-align: center; max-width: 560px; color: #fff; }
+  #start-card h1 { margin: 0 0 4px; font-size: 46px; letter-spacing: 3px; color: #ffd23c; }
+  #start-card h2 { margin: 0 0 14px; font-size: 15px; font-weight: normal; color: #bcd6ff; letter-spacing: 1px; }
+  #start-card p { font-size: 14px; line-height: 1.65; color: #dbe6f2; }
+  #start-card .keys { text-align: left; display: inline-block; font-size: 13px; line-height: 1.8; color: #cfe3ff; margin: 8px 0 18px; }
+  #start-button { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: bold; padding: 13px 42px; border: none; border-radius: 999px; background: #ffd23c; color: #1a1405; }
+  #start-button:hover { background: #ffe06a; }
+  #reset-button { display: block; margin: 12px auto 0; background: none; border: none; color: #8fa8c2; cursor: pointer; font-size: 12px; text-decoration: underline; }
+  #wasted { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(20, 4, 4, 0.6); z-index: 9; }
+  #wasted span { font-size: 64px; font-weight: bold; letter-spacing: 8px; color: #e05252; }
+</style>
+<script>
+  window.__errors = [];
+  window.addEventListener('error', function (e) { window.__errors.push(String(e.message)); });
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="hud">
+  <div id="top-left" class="panel">
+    <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+    <div id="cash">$0</div>
+    <div id="health-row"><div id="health-bar"><div id="health-fill"></div></div><span id="health-text">100</span></div>
+  </div>
+  <div id="mission" class="panel">
+    <div id="mission-title">Job 1 — The Pickup</div>
+    <div id="mission-obj">Meet Mara's runner at the east-side garage</div>
+    <div id="mission-dist"></div>
+  </div>
+  <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
+  <div id="speedo" class="panel">
+    <div id="speed">0</div>
+    <div id="speed-unit">km/h · ON FOOT</div>
+    <div id="car-health"></div>
+  </div>
+  <div id="controls" class="panel">
+    WASD move / drive · Mouse drag look<br>
+    E enter car / interact · F punch · 1 fists / 2 pistol · Click shoot<br>
+    Shift sprint · Space handbrake · P pause · M mute · R restart job
+  </div>
+  <div id="toast"></div>
+  <div id="job-done"></div>
+</div>
+<div id="start-screen">
+  <div id="start-card">
+    <h1>SOLMAR CITY</h1>
+    <h2>AN OPEN-WORLD CRIME GAME</h2>
+    <p>New in town, broke and unknown. Mara, the fixer who runs the east side,
+       has work for a driver who asks no questions. Five jobs stand between you
+       and the big score — steal cars, dodge the law, and don't get caught.</p>
+    <div class="keys">
+      WASD — move / drive &nbsp;·&nbsp; Mouse drag — look<br>
+      E — steal / enter a car &nbsp;·&nbsp; F — punch &nbsp;·&nbsp; 2 then Click — shoot<br>
+      Shift — sprint &nbsp;·&nbsp; Space — handbrake &nbsp;·&nbsp; P — pause &nbsp;·&nbsp; M — mute
+    </div>
+    <br>
+    <button id="start-button">START THE JOB</button>
+    <button id="reset-button">clear saved progress</button>
+  </div>
+</div>
+<div id="wasted"><span>BUSTED</span></div>
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
